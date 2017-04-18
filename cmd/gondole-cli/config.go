@@ -3,7 +3,7 @@
 // This file implements the configuration part for when you need the API
 // key to modify things in the Mastodon configuration and manage measurements.
 
-package gondole
+package main
 
 import (
 	"fmt"
@@ -30,17 +30,6 @@ var (
 		"gondole",
 	)
 )
-
-// Config holds our parameters
-type Server struct {
-	ID          int64
-	Name        string
-	BearerToken string
-}
-
-type Config struct {
-	Default string
-}
 
 func loadGlobal(file string) (c *Config, err error) {
 	log.Printf("file=%s", file)

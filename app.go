@@ -1,95 +1,96 @@
+/*
+Copyright 2017 Ollivier Robert
+Copyright 2017 Mikael Berthe
+
+Licensed under the MIT license.  Please see the LICENSE file is this directory.
+*/
+
 package gondole
 
 import (
-	"encoding/json"
-	"github.com/sendgrid/rest"
-	"log"
+	"errors"
+	"net/url"
 	"strings"
-)
 
-var (
-	ourScopes = []string{
-		"read",
-		"write",
-		"follow",
-	}
+	"github.com/sendgrid/rest"
 )
 
 type registerApp struct {
-	ID           int64  `json:"id"`
-	ClientID     int64  `json:"Client_id"`
+	ID           int    `json:"id"`
+	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 }
 
-func registerApplication(name string, scopes []string, redirectURI string) (g *Gondole, err error) {
-	g = &Gondole{
-		Name: name,
+// buildInstanceURL creates the URL from the instance name or cleans up the
+// provided URL
+func buildInstanceURL(instanceName string) (string, error) {
+	if instanceName == "" {
+		return "", errors.New("no instance provided")
 	}
 
-	req := g.prepareRequest("apps")
-	if redirectURI != "" {
-		req.QueryParams["redirect_uris"] = redirectURI
-	} else {
-		req.QueryParams["redirect_uris"] = NoRedirect
+	instanceURL := instanceName
+	if !strings.Contains(instanceURL, "/") {
+		instanceURL = "https://" + instanceName
 	}
-	req.QueryParams["client_name"] = name
-	req.QueryParams["scopes"] = strings.Join(scopes, " ")
-	req.Method = rest.Post
 
-	r, err := rest.API(req)
+	u, err := url.ParseRequestURI(instanceURL)
 	if err != nil {
-		log.Fatalf("error can not register app: %v", err)
+		return "", err
 	}
 
-	var resp registerApp
+	u.Path = ""
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
 
-	err = json.Unmarshal([]byte(r.Body), &resp)
+// NewApp registers a new application with a given instance
+func NewApp(name string, scopes []string, redirectURI, instanceName string) (g *Client, err error) {
+	instanceURL, err := buildInstanceURL(instanceName)
 	if err != nil {
-		log.Fatalf("error can not register app: %v", err)
+		return nil, err
 	}
-	g.ID = resp.ClientID
-	g.Secret = resp.ClientSecret
 
-	server := &Server{
-		ID:          g.ID,
+	g = &Client{
 		Name:        name,
-		BearerToken: g.Secret,
+		InstanceURL: instanceURL,
+		APIBase:     instanceURL + currentAPIPath,
 	}
-	err = server.WriteToken(name)
-	if err != nil {
-		log.Fatalf("error: can not write token for %s", name)
+
+	params := make(apiCallParams)
+	params["client_name"] = name
+	params["scopes"] = strings.Join(scopes, " ")
+	if redirectURI != "" {
+		params["redirect_uris"] = redirectURI
+	} else {
+		params["redirect_uris"] = NoRedirect
 	}
+
+	var app registerApp
+	if err := g.apiCall("apps", rest.Post, params, &app); err != nil {
+		return nil, err
+	}
+
+	g.ID = app.ClientID
+	g.Secret = app.ClientSecret
+
 	return
 }
 
-// NewApp registers a new instance
-func NewApp(name string, scopes []string, redirectURI string) (g *Gondole, err error) {
-	// Load configuration, will register if none is found
-	cnf, err := LoadConfig(name)
+// RestoreApp recreates an application client with existing secrets
+func RestoreApp(name, instanceName, appID, appSecret string, userToken *UserToken) (g *Client, err error) {
+	instanceURL, err := buildInstanceURL(instanceName)
 	if err != nil {
-		// Nothing exist yet
-		cnf := Config{
-			Default: name,
-		}
-		err = cnf.Write()
-		if err != nil {
-			log.Fatalf("error: can not write config for %s", name)
-		}
-
-		// Now register this through OAuth
-		if scopes == nil {
-			scopes = ourScopes
-		}
-
-		g, err = registerApplication(name, scopes, redirectURI)
-
-	} else {
-		g = &Gondole{
-			Name:   cnf.Name,
-			ID:     cnf.ID,
-			Secret: cnf.BearerToken,
-		}
+		return nil, err
 	}
 
-	return
+	return &Client{
+		Name:        name,
+		InstanceURL: instanceURL,
+		APIBase:     instanceURL + currentAPIPath,
+		ID:          appID,
+		Secret:      appSecret,
+		UserToken:   userToken,
+	}, nil
 }

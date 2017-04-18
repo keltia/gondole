@@ -1,38 +1,35 @@
+/*
+Copyright 2017 Ollivier Robert
+Copyright 2017 Mikael Berthe
+
+Licensed under the MIT license.  Please see the LICENSE file is this directory.
+*/
+
 package gondole
 
 import (
-	"github.com/sendgrid/rest"
-	"fmt"
 	"errors"
 )
 
+// apiCallParams is a map with the parameters for an API call
+type apiCallParams map[string]string
+
 const (
-	APIVersion = "0.0"
+	// GondoleVersion contains the version of the Gondole implementation
+	GondoleVersion = "0.1"
 
-	APIEndpoint = "https://mastodon.social/api/v1"
+	// API version implemented in this library
+	apiVersion     = "v1"
+	currentAPIPath = "/api/" + apiVersion
 
+	// NoRedirect is the URI for no redirection in the App registration
 	NoRedirect = "urn:ietf:wg:oauth:2.0:oob"
 )
 
+// Error codes
 var (
-	ErrAlreadyRegistered = errors.New("App already registered")
+	ErrAlreadyRegistered = errors.New("app already registered")
+	ErrEntityNotFound    = errors.New("entity not found")
+	ErrInvalidParameter  = errors.New("incorrect parameter")
+	ErrInvalidID         = errors.New("incorrect entity ID")
 )
-
-// prepareRequest insert all pre-defined stuff
-func (g *Gondole) prepareRequest(what string) (req rest.Request) {
-	endPoint := APIEndpoint + fmt.Sprintf("/%s", what)
-
-	// Add at least one option, the APIkey if present
-	hdrs := make(map[string]string)
-	opts := make(map[string]string)
-
-	// Insert our sig
-	hdrs["User-Agent"] = fmt.Sprintf("Gondole/%s", APIVersion)
-
-	req = rest.Request{
-		BaseURL:     endPoint,
-		Headers:     hdrs,
-		QueryParams: opts,
-	}
-	return
-}
